@@ -48,28 +48,86 @@ def get_epoch_for_time_ago(days):
     
 
 
-def initialize_database(db_file):
+
+def parse_ontology(ontofile):
+    ontodata = open(ontofile).read().split('#')
+    things = {}
+    for desc in ontodata:
+        lines = desc.split('\n')
+        assert lines[0].split()[0] == 'TYPE', lines
+        thingname = lines[0].split()[1]
+        thing = []
+        for line in lines[1:]:
+            cmd, atts = line.split()
+            thing.append((cmd, atts.split('|')))
+        things[thingname] = thing
+    return things
+
+
+DATAKIND_STORAGES = {"smalltext" : 'text',
+                     "text" : 'text',
+                     "datetime" : 'int'}
+def initialize_database(db_file, thing_descs):
     connection = sqlite.connect(db_file)
     cursor = connection.cursor()
-    cursor.execute("""CREATE TABLE notes (id int, added text, body text, source text, target text, groups text)""")
-    # ID is identifier number, body is the ntoe itself, source is title of source paper, target is list of 
-    # relevant other things, groups is list of group names.
-    cursor.execute("""CREATE TABLE papers (id int, title text, pubdate text, authors text, groups text, summary text, notes text, misc text, added text, read text)""")
-    # ID is identifier number, title is paper title, source is name of journal or etc, authors are paper authors, groups is list of group
-    # names, summary is written description of paper, misc is auxiliary data that can be gleaned from entry.
-    cursor.execute("""CREATE TABLE groups (id int, name text, members text, description text, added text)""")
-    # ID is identifier number, name is group name, members is list of paper titles and note ids, description is written summary.
-    connection.commit()
+    for thingname, attributes in thing_descs:
+        tablename = thingname.lower() + '_table'
+        memberstring = "("
+        for mode, atts in attributes:
+            if mode == 'HAS' and atts[0] == 'ID':
+                memberstring += 'id int,'
+            elif mode == 'HAS':
+                label, dataname, datakind = atts
+                memberstring += '%s %s,' % (dataname, DATAKIND_STORAGES[datakind])
+            elif mode == 'LINKS':
+                linkkind, label, dataname, count = atts
+                memberstring += '%s text' % dataname
+            elif mode == 'SHOWS':
+                pass # Just determines what shows up on the item list.
+            else:
+                raise Exception, 'Parse error: %s' % str((mode, atts))
+        memberstring += ')'
+        table_command = "CREATE TABLE %s %s" % (tablename, memberstring)
+        cursor.execute(table_command)
+        cursor.commit()
     connection.close()
+    print "Database initialized successfully."
+
+
+
+#def initialize_database(db_file):
+    #connection = sqlite.connect(db_file)
+    #cursor = connection.cursor()
+    #cursor.execute("""CREATE TABLE notes (id int, added text, body text, source text, target text, groups text)""")
+    ## ID is identifier number, body is the note itself, source is title of source paper, target is list of 
+    ## relevant other things, groups is list of group names.
+    #cursor.execute("""CREATE TABLE papers (id int, title text, pubdate text, authors text, groups text, summary text, notes text, misc text, added text, read text)""")
+    ## ID is identifier number, title is paper title, source is name of journal or etc, authors are paper authors, groups is list of group
+    ## names, summary is written description of paper, misc is auxiliary data that can be gleaned from entry.
+    #cursor.execute("""CREATE TABLE groups (id int, name text, members text, description text, added text)""")
+    ## ID is identifier number, name is group name, members is list of paper titles and note ids, description is written summary.
+    #connection.commit()
+    #connection.close()
     
     
     
 class NewItemDialog(wx.Dialog):
     def add_text_entry(self, title, defaulttext = ''):
         label = wx.StaticText(self, -1, title)
+        ctrl = wx.TextCtrl(self, -1, defaulttext,
+                           style = wx.TE_MULTILINE)
+        box = wx.BoxSizer(orient = wx.VERTICAL)
+        box.Add(label, flag = wx.ALIGN_LEFT)
+        box.Add(ctrl, flag = wx.EXPAND)
+        return ctrl, box
+    def add_small_text_entry(self, title, defaulttext = ''):
+        label = wx.StaticText(self, -1, title)
         ctrl = wx.TextCtrl(self, -1, defaulttext)
-        return label, ctrl
-    def add_itemselector(self, title, itemtype):
+        box = wx.BoxSizer(orient = wx.HORIZONTAL)
+        box.Add(label, flag = wx.ALIGN_LEFT)
+        box.Add(ctrl, flag = wx.EXPAND)
+        return ctrl, box
+    def add_itemselector(self, title, itemtype, itemcount):
         itemdog = SELECTOR_TYPES[itemtype]
         label = wx.StaticText(self, -1, title)
         selector = ItemSelector(self, [])
@@ -82,10 +140,28 @@ class NewItemDialog(wx.Dialog):
         self.Bind(wx.EVT_BUTTON, open_selector, button)
         
         return label, selector, button
+    
+    def __init__(self, thingname, thing_desc):
+        wx.Dialog.__init__(self, parent, -1,
+                           title = "Adding New %s" % thingname)
+        for 
         
-class NewNoteDialog(wx.Dialog):
-    def __init__(self, parent):
+class NewNoteDialog(wx.NewItemDialog):
+    def __init__(self, parent, source = None):
         wx.Dialog.__init__(self, parent, -1, title = "Adding New Note")
+        
+
+class NewPaperDialog(wx.NewItemDialog):
+    def __init__(self, parent, citationString = None):
+        # Should be able to initialize from some citation format.
+        
+        titleL, self.title = self.add_text_entry()
+        pubdateL, self.pubdate = self.add_text_entry()
+        authorsL, self.authors = self.add_text_entry()
+        summaryL, self.summary = self.add_text_entry()
+        notesL, self.sel_notes, self.btn_notes = self.add_itemselector('NOTES')
+        groupsL, self.sel_groups, self.btn_groups = self.add_itemselector('GROUPS')
+        
         
         
     

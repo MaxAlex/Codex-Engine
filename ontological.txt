@@ -1,0 +1,26 @@
+TYPE Paper
+HAS ID
+HAS Title|title|smalltext
+HAS Publication_Date|pubdate|datetime
+HAS Authors|authors|smalltext
+LINKS Group|Groups|groups|many
+HAS Summary|summary|largetext
+LINKS Note|Notes|notes|many
+HAS Added|added|datetime
+HAS Read|read|datetime
+#
+TYPE Group
+HAS ID
+HAS Name|name|smalltext
+LINKS Paper|Papers|papers|many
+LINKS Note|Notes|notes|many
+HAS Description|description|text
+HAS Added|added|datetime
+#
+TYPE Note
+HAS ID
+HAS Body|body|text
+LINKS Paper|Source|source|single
+LINKS Paper|Related|related|many
+LINKS Group|Groups|groups|many
+HAS Added|added|datetime
