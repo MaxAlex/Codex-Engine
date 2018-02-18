@@ -8,6 +8,7 @@ HAS Summary|summary|largetext
 LINKS Note|Notes|notes|many
 HAS Added|added|datetime
 HAS Read|read|datetime
+SHOW Title|Publication_Date|Group
 #
 TYPE Group
 HAS ID
@@ -16,11 +17,13 @@ LINKS Paper|Papers|papers|many
 LINKS Note|Notes|notes|many
 HAS Description|description|text
 HAS Added|added|datetime
+SHOW Name|Description
 #
 TYPE Note
 HAS ID
 HAS Body|body|text
 LINKS Paper|Source|source|single
-LINKS Paper|Related|related|many
+LINKS Relate|Related|related|many
 LINKS Group|Groups|groups|many
 HAS Added|added|datetime
+SHOW Body|Paper|Group

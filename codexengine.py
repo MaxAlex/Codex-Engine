@@ -21,20 +21,13 @@ import os
 import time
 import sqlite3 as sqlite
 
-DATABASE_FILE = r'\\rc-data1\blaise\ms_data_share\Max\testdb.sqlite'
-
-
-NOTE_COLS = ['Body', 'Source', 'Reference(s)', 'Group(s)', 'Added']
-PAPER_COLS = ['Title', 'Source', 'Author(s)', 'Publication Date', 'Group(s)', 'Description', 'Added', 'Read']
-GROUP_COLS = ['Name', '# Members', 'Description', 'Added']
+#DATABASE_FILE = r'\\rc-data1\blaise\ms_data_share\Max\testdb.sqlite'
+DATABASE_FILE = os.path.join(os.path.realpath(__file__), 'testdb.sqlite')
+ONTOLOGY_FILE = os.path.join(os.path.realpath(__file__), 'ontological.txt')
 
 SEPARATOR = '|||'
 
 
-
-SELECTOR_TYPES = {'Note':NoteSelector,
-                  'Paper':PaperSelector,
-                  'Group':GroupSelector}
 
 def get_current_time(): # In epoch format.
     return time.time()
@@ -62,6 +55,7 @@ def parse_ontology(ontofile):
             thing.append((cmd, atts.split('|')))
         things[thingname] = thing
     return things
+CURRENT_ONT = parse_ontology(ONTOLOGY_FILE)
 
 
 DATAKIND_STORAGES = {"smalltext" : 'text',
@@ -92,24 +86,26 @@ def initialize_database(db_file, thing_descs):
         cursor.commit()
     connection.close()
     print "Database initialized successfully."
+if not os.path.exists(DATABASE_FILE):
+    initialize_database(DATABASE_FILE, CURRENT_ONT)
+DATA_CON = sqlite.connect(DATABASE_FILE)
+DATA = DATA_CON.cursor()
 
-
-
-#def initialize_database(db_file):
-    #connection = sqlite.connect(db_file)
-    #cursor = connection.cursor()
-    #cursor.execute("""CREATE TABLE notes (id int, added text, body text, source text, target text, groups text)""")
-    ## ID is identifier number, body is the note itself, source is title of source paper, target is list of 
-    ## relevant other things, groups is list of group names.
-    #cursor.execute("""CREATE TABLE papers (id int, title text, pubdate text, authors text, groups text, summary text, notes text, misc text, added text, read text)""")
-    ## ID is identifier number, title is paper title, source is name of journal or etc, authors are paper authors, groups is list of group
-    ## names, summary is written description of paper, misc is auxiliary data that can be gleaned from entry.
-    #cursor.execute("""CREATE TABLE groups (id int, name text, members text, description text, added text)""")
-    ## ID is identifier number, name is group name, members is list of paper titles and note ids, description is written summary.
-    #connection.commit()
-    #connection.close()
+# Retrieving a list of items would likely be faster if 
+# not done one-per-query, but whatever.  Prototype!
+def retreiveItemData(itemtype, idNum, fields):
+    command = "SELECT %s FROM %s WHERE id = '%s'" % (', '.join(fields),
+                                                     itemtype.lower(),
+                                                     str(idNum))
+    DATA.execute(command)
+    return DATA.fetchall()[0]
     
-    
+
+
+
+def add_entry_to_database(db_cursor, entry_info):
+    raise NotImplementedError
+
     
 class NewItemDialog(wx.Dialog):
     def add_text_entry(self, title, defaulttext = ''):
@@ -119,18 +115,19 @@ class NewItemDialog(wx.Dialog):
         box = wx.BoxSizer(orient = wx.VERTICAL)
         box.Add(label, flag = wx.ALIGN_LEFT)
         box.Add(ctrl, flag = wx.EXPAND)
-        return ctrl, box
+        return ctrl.GetValue, box
     def add_small_text_entry(self, title, defaulttext = ''):
         label = wx.StaticText(self, -1, title)
         ctrl = wx.TextCtrl(self, -1, defaulttext)
         box = wx.BoxSizer(orient = wx.HORIZONTAL)
         box.Add(label, flag = wx.ALIGN_LEFT)
         box.Add(ctrl, flag = wx.EXPAND)
-        return ctrl, box
-    def add_itemselector(self, title, itemtype, itemcount):
+        return ctrl.GetValue, box
+    def add_itemselector(self, title, itemtype, itemcount,
+                         defaultmembers = None):
         itemdog = SELECTOR_TYPES[itemtype]
         label = wx.StaticText(self, -1, title)
-        selector = ItemSelector(self, [])
+        selector = ItemListPanel(self, itemtype, defaultmembers)
         def open_selector(self, evt):
             if itemdog.ShowModal() == wx.ID_OK:
                 items = itemdog.GetItems()
@@ -139,31 +136,45 @@ class NewItemDialog(wx.Dialog):
         button = wx.Button(self, -1, 'Select')
         self.Bind(wx.EVT_BUTTON, open_selector, button)
         
-        return label, selector, button
+        return label, selector.GetMemberIds, button
     
-    def __init__(self, thingname, thing_desc):
+    def __init__(self, thingname, thing_desc, thing_info):
         wx.Dialog.__init__(self, parent, -1,
                            title = "Adding New %s" % thingname)
-        for 
+        self.ctrls = {}
+        sizer = wx.BoxSizer()
+        for mode, atts in thing_desc:
+            if mode == 'HAS' and len(atts) != 1:
+                label, dataname, datakind = atts
+                if datakind == 'smalltext':
+                    ctrl, box = self.add_small_text_entry(label,
+                                                          thing_info[label])
+                elif datakind == 'text':
+                    ctrl, box = self.add_text_entry(label,
+                                                    thing_info[label])
+                elif datakind == 'datetime':
+                    # This could helpfully be updated to a datetime-specific
+                    # entry control.
+                    ctrl, box = self.add_small_text_entry(label,
+                                                          thing_info[label])
+                else:
+                    raise Exception, datakind
+            elif mode == 'LINKS':
+                linkkind, label, dataname, count = atts
+                ctrl, box = self.add_itemselector(label, linkkind, count,
+                                                  thing_info[label])
+            else:
+                assert atts == 'ID' or mode == 'SHOW', (mode, atts)
+            self.ctrls[dataname] = ctrl
+            sizer.Add(box)
+            sizer.Add(wx.StaticLine(style = wx.LI_HORIZONTAL))
         
-class NewNoteDialog(wx.NewItemDialog):
-    def __init__(self, parent, source = None):
-        wx.Dialog.__init__(self, parent, -1, title = "Adding New Note")
+        self.SetSizerAndFit(sizer)
+        self.Show()
+    
+    def MakeItem()
         
 
-class NewPaperDialog(wx.NewItemDialog):
-    def __init__(self, parent, citationString = None):
-        # Should be able to initialize from some citation format.
-        
-        titleL, self.title = self.add_text_entry()
-        pubdateL, self.pubdate = self.add_text_entry()
-        authorsL, self.authors = self.add_text_entry()
-        summaryL, self.summary = self.add_text_entry()
-        notesL, self.sel_notes, self.btn_notes = self.add_itemselector('NOTES')
-        groupsL, self.sel_groups, self.btn_groups = self.add_itemselector('GROUPS')
-        
-        
-        
     
     
     
@@ -180,103 +191,42 @@ class MixedListCtrl(listmix.ListCtrlAutoWidthMixin, wx.ListCtrl):
     
 
 
-class ItemDisplay(wx.Panel):
-    def __init__(self, parent, database, *args, **kwargs):
-        wx.Panel.__init__(self, parent = parent, id = -1, *args, **kwargs)
-        self.parent = parent
-        self.db = database
-        
+class ItemListPanel(wx.Panel):
+    def __init__(self, parent, itemtype, listmembers):
+        wx.Panel.__init__(self, parent = parent, id = -1, *args, **kwargs)        
         sizer = wx.BoxSizer()
         self.list = MixedListCtrl(self, -1, style = wx.LC_REPORT)
-        sizer.Add(self.list, flag = wx.EXPAND)
+
+        item_ont = CURRENT_ONT[itemtype]
+        item_atts = [x[1] for x in item_ont if x[0] == 'HAS' or x[0] == 'LINKS']
+        column_names, data_names = zip(*item_atts)[:2]
         
-        self.Bind(wx.EVT_KEY_DOWN, self.parent.GetParent().GetParent().processKeypress)
+        for colname in column_names:
+            self.list.AppendColumn(colname)
+        for listmember in listmembers:
+            memberdata = retrieveItemData(itemtype, listmember['id'], data_names)
+            # May want to add some extra formatting (string shortening...) here.
+            self.list.Append(map(str, memberdata))
+            
         self.SetSizerAndFit(sizer)
         
-        self.list.SetSize(self.GetSize())
-        print "FOO"
-        #self.Populate()
-        
-        #listmix.ColumnSorterMixin.__init__(self, 3)
-        
+        self.list.SetSize(self.GetSize()) # Probably obsolete?
 
-    def GetListCtrl(self):
-        return self.list    
-    #def Populate(self):
-        #raise NotImplementedError, 'Implemented by note/paper/group displays.'
+    def GetMemberIds(self):
+        # Return ID attribute of all displayed entries, for use in 
+        # NewItemDialog.
+        pass
+    def GetSelectedMemberIds(self):
+        # For use in ItemSelector-contained instances.
+        pass
 
-class NoteDisplay(ItemDisplay):
-    def __init__(self, *args, **kwargs):
-        ItemDisplay.__init__(self, *args, **kwargs)
-        
-        for col_name in NOTE_COLS:
-            self.list.AppendColumn(col_name)        
-        
-        self.note_list = self.db.execute('SELECT * FROM notes').fetchall() + [(['test']*6)]
-        self.note_list.sort(key = lambda x: x[0])
-        for idnum, text, source, target, groups, added in self.note_list:
-            targets = target.split(SEPARATOR)
-            groups = groups.split(SEPARATOR)
-            self.list.Append([text, source, ', '.join(targets), ', '.join(groups), epoch_to_display(added)])
-        
-    
-class PaperDisplay(ItemDisplay):
-    def __init__(self, *args, **kwargs):
-        ItemDisplay.__init__(self, *args, **kwargs)
-    
-        for col_name in PAPER_COLS:
-            self.list.AppendColumn(col_name) 
-    
-        self.paper_list = self.db.execute('SELECT * FROM papers').fetchall()
-        self.paper_list.sort(key = lambda x: x[0])
-        for idnum, title, authors, groups, description in self.paper_list:
-            authors = authors.split(SEPARATOR)
-            groups = groups.split(SEPARATOR)
-            self.list.Append([title, ', '.join(authors), ', '.join(groups), description])
-            
-        
-class GroupDisplay(ItemDisplay):
-    def __init__(self, *args, **kwargs):
-        ItemDisplay.__init__(self, *args, **kwargs)
-        
-        for col_name in GROUP_COLS:
-            self.list.AppendColumn(col_name)        
-    
-        self.group_list = self.db.execute("SELECT * FROM groups").fetchall()
-        self.group_list.sort(key = lambda x: x[0])
-        for idnum, name, memberlist, description, added in self.group_list:
-            membercount = len(memberlist.split(SEPARATOR))
-            self.list.Append([idnum, membercount,
-                              description, epoch_to_display(added)])
-        
-  
-
-
-
-class ItemDialog(wx.Dialog):
-    def __init__(self, parent, note_row = None, title = None):
-        wx.Dialog.__init__(self, parent, -1, title = title)
-    
-    def textCtrl(self, labeltitle, labelname, defaultvalue):
-        return (wx.StaticText(self, -1, labeltitle),
-                wx.TextCtrl(self, -1, defaultvalue, name = labelname))
-
-
-#class NoteInfoDialog(wx.ItemDialog):
-    #def __init__(self, parent, note_row = None, title = None):
-        #wx.ItemDialog.__init__(self, parent, -1, title = title)    
-        
-        #if note_row:
-            
-            
-        
-        #idnum_ws = self.textCtrl('')
-        
-        #gbs = wx.GridBagSizer(5, 5)
+class ItemSelector(wx.Dialog):
+    # Contains an ItemListPanel that lists all entries of the specified
+    # type in the database.
+    pass
         
         
-        
-
+# "Display"s and "ItemSelector" should be the same thing.
 class MainDisplay(wx.Frame):
     def __init__(self, parent, id = -1):
         wx.Frame.__init__(self, parent, id, name = "Codex Engine", size = (700, 800))
